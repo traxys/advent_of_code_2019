@@ -288,4 +288,153 @@ pub fn generate_better_passwords_in_range((start, end): &(Vec<u8>, Vec<u8>)) -> 
         .count()
 }
 
+#[aoc_generator(day5)]
+pub fn parse_intcode(code: &str) -> Vec<i64> {
+    code.split(",").map(|c| c.parse().unwrap()).collect()
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+enum InstructionMode {
+    Position,
+    Immediate,
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+enum Opcode {
+    Mult,
+    Add,
+    Input,
+    Output,
+    Exit,
+}
+impl Opcode {
+    fn arg_count(&self) -> usize {
+        match self {
+            Opcode::Mult | Opcode::Add => 3,
+            Opcode::Input | Opcode::Output => 1,
+            Opcode::Exit => 0,
+        }
+    }
+    fn more(&self) -> bool {
+        match self {
+            Opcode::Mult | Opcode::Add | Opcode::Input | Opcode::Output => true,
+            Opcode::Exit => false,
+        }
+    }
+}
+#[derive(Clone, PartialEq, Eq, Debug)]
+struct Instruction {
+    op: Opcode,
+    args: Vec<Parameter>,
+}
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+struct Parameter {
+    value: i64,
+    mode: InstructionMode,
+}
+
+fn get_mode(param_num: usize, modes: &[InstructionMode]) -> InstructionMode {
+    *modes.get(param_num).unwrap_or(&InstructionMode::Position)
+}
+fn get_arg(param_num: usize, modes: &[InstructionMode], code: &[i64]) -> Parameter {
+    Parameter {
+        value: code[param_num + 1],
+        mode: get_mode(param_num, modes),
+    }
+}
+fn get_args(count: usize, modes: &[InstructionMode], code: &[i64]) -> Vec<Parameter> {
+    let mut args = Vec::new();
+    for i in 0..count {
+        args.push(get_arg(i, modes, code));
+    }
+    args
+}
+fn extract_from_opcode(
+    opcode: Opcode,
+    modes: &[InstructionMode],
+    code: &[i64],
+) -> (Instruction, usize) {
+    (
+        Instruction {
+            op: opcode,
+            args: get_args(opcode.arg_count(), &modes, code),
+        },
+        opcode.arg_count() + 1,
+    )
+}
+
+fn get_instruction(code: &[i64]) -> Result<(Instruction, usize), String> {
+    let instr = code[0];
+    let opcode = match instr % 100 {
+        01 => Opcode::Add,
+        02 => Opcode::Mult,
+        03 => Opcode::Input,
+        04 => Opcode::Output,
+        99 => Opcode::Exit,
+        i => return Err(format!("No such opcode: {}", i)),
+    };
+    let mut modes_int = instr / 100;
+    let mut modes = Vec::new();
+    while modes_int != 0 {
+        match modes_int % 10 {
+            0 => modes.push(InstructionMode::Position),
+            1 => modes.push(InstructionMode::Immediate),
+            i => return Err(format!("Invalid mode: {}", i)),
+        }
+        modes_int /= 10;
+    }
+    Ok(extract_from_opcode(opcode, &modes, code))
+}
+fn resolve_arg(param: Parameter, code: &[i64]) -> i64 {
+    match param.mode {
+        InstructionMode::Immediate => param.value,
+        InstructionMode::Position => code[param.value as usize],
+    }
+}
+
+use std::collections::VecDeque;
+
+fn exec_instr(
+    param: Instruction,
+    code: &mut [i64],
+    input: &mut VecDeque<i64>,
+    ouput: &mut Vec<i64>,
+) -> bool {
+    match param.op {
+        Opcode::Add => {
+            code[param.args[2].value as usize] =
+                resolve_arg(param.args[0], code) + resolve_arg(param.args[1], code)
+        }
+        Opcode::Mult => {
+            code[param.args[2].value as usize] =
+                resolve_arg(param.args[0], code) * resolve_arg(param.args[1], code)
+        }
+        Opcode::Input => {
+            let value = input.pop_front().expect("No input");
+            code[param.args[0].value as usize] = value;
+        }
+        Opcode::Output => ouput.push(resolve_arg(param.args[0], code)),
+        Opcode::Exit => (),
+    };
+    param.op.more()
+}
+
+#[aoc(day5, part1)]
+pub fn execute_better_intcode(code: &[i64]) -> i64 {
+    let mut memory = Vec::from(code);
+
+    let mut input = VecDeque::from(vec![1]);
+    let mut output = Vec::new();
+
+    let mut instruction_pointer = 0;
+
+    while instruction_pointer < code.len() {
+        let (instr, offset) = get_instruction(&memory[instruction_pointer..]).unwrap();
+        instruction_pointer += offset;
+        if !exec_instr(instr, &mut memory, &mut input, &mut output) {
+            break;
+        }
+    }
+    *output.last().unwrap()
+}
+
 aoc_lib! { year = 2019 }
