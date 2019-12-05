@@ -300,6 +300,10 @@ enum InstructionMode {
 }
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 enum Opcode {
+    JumpIfTrue,
+    JumpIfFalse,
+    LessThan,
+    Equals,
     Mult,
     Add,
     Input,
@@ -309,15 +313,16 @@ enum Opcode {
 impl Opcode {
     fn arg_count(&self) -> usize {
         match self {
-            Opcode::Mult | Opcode::Add => 3,
+            Opcode::Mult | Opcode::Add | Opcode::LessThan | Opcode::Equals => 3,
             Opcode::Input | Opcode::Output => 1,
+            Opcode::JumpIfFalse | Opcode::JumpIfTrue => 2,
             Opcode::Exit => 0,
         }
     }
     fn more(&self) -> bool {
         match self {
-            Opcode::Mult | Opcode::Add | Opcode::Input | Opcode::Output => true,
             Opcode::Exit => false,
+            _ => true,
         }
     }
 }
@@ -369,6 +374,10 @@ fn get_instruction(code: &[i64]) -> Result<(Instruction, usize), String> {
         02 => Opcode::Mult,
         03 => Opcode::Input,
         04 => Opcode::Output,
+        05 => Opcode::JumpIfTrue,
+        06 => Opcode::JumpIfFalse,
+        07 => Opcode::LessThan,
+        08 => Opcode::Equals,
         99 => Opcode::Exit,
         i => return Err(format!("No such opcode: {}", i)),
     };
@@ -398,42 +407,98 @@ fn exec_instr(
     code: &mut [i64],
     input: &mut VecDeque<i64>,
     ouput: &mut Vec<i64>,
-) -> bool {
-    match param.op {
+) -> (bool, Option<usize>) {
+    let new_ip = match param.op {
         Opcode::Add => {
             code[param.args[2].value as usize] =
-                resolve_arg(param.args[0], code) + resolve_arg(param.args[1], code)
+                resolve_arg(param.args[0], code) + resolve_arg(param.args[1], code);
+            None
         }
         Opcode::Mult => {
             code[param.args[2].value as usize] =
-                resolve_arg(param.args[0], code) * resolve_arg(param.args[1], code)
+                resolve_arg(param.args[0], code) * resolve_arg(param.args[1], code);
+            None
         }
         Opcode::Input => {
             let value = input.pop_front().expect("No input");
             code[param.args[0].value as usize] = value;
+            None
         }
-        Opcode::Output => ouput.push(resolve_arg(param.args[0], code)),
-        Opcode::Exit => (),
+        Opcode::Output => {
+            ouput.push(resolve_arg(param.args[0], code));
+            None
+        }
+        Opcode::Exit => None,
+        Opcode::JumpIfTrue => {
+            if resolve_arg(param.args[0], code) != 0 {
+                Some(resolve_arg(param.args[1], code) as usize)
+            } else {
+                None
+            }
+        }
+        Opcode::JumpIfFalse => {
+            if resolve_arg(param.args[0], code) == 0 {
+                Some(resolve_arg(param.args[1], code) as usize)
+            } else {
+                None
+            }
+        }
+        Opcode::LessThan => {
+            code[param.args[2].value as usize] =
+                if resolve_arg(param.args[0], code) < resolve_arg(param.args[1], code) {
+                    1
+                } else {
+                    0
+                };
+            None
+        }
+        Opcode::Equals => {
+            code[param.args[2].value as usize] =
+                if resolve_arg(param.args[0], code) == resolve_arg(param.args[1], code) {
+                    1
+                } else {
+                    0
+                };
+            None
+        }
     };
-    param.op.more()
+    (param.op.more(), new_ip)
+}
+
+fn run_intcode_program(mut memory: Vec<i64>, mut input: VecDeque<i64>) -> Vec<i64> {
+    let mut output = Vec::new();
+    
+    let mut instruction_pointer = 0;
+    loop {
+        let (instr, offset) = get_instruction(&memory[instruction_pointer..]).expect("invalid instruction");
+        let (cont, new_ip) = exec_instr(instr, &mut memory, &mut input, &mut output);
+        if !cont {
+            break;
+        }
+        match new_ip {
+            Some(i) => instruction_pointer = i,
+            None => instruction_pointer += offset,
+        };
+    }
+
+    output
 }
 
 #[aoc(day5, part1)]
 pub fn execute_better_intcode(code: &[i64]) -> i64 {
-    let mut memory = Vec::from(code);
+    let memory = Vec::from(code);
+    let input = VecDeque::from(vec![1]);
+    let output = run_intcode_program(memory, input);
 
-    let mut input = VecDeque::from(vec![1]);
-    let mut output = Vec::new();
+    *output.last().unwrap()
+}
 
-    let mut instruction_pointer = 0;
+#[aoc(day5, part2)]
+pub fn intcode_thermal_radiators(code: &[i64]) -> i64 {
+    let memory = Vec::from(code);
+    let input = VecDeque::from(vec![5]);
+    let output = run_intcode_program(memory, input);
 
-    while instruction_pointer < code.len() {
-        let (instr, offset) = get_instruction(&memory[instruction_pointer..]).unwrap();
-        instruction_pointer += offset;
-        if !exec_instr(instr, &mut memory, &mut input, &mut output) {
-            break;
-        }
-    }
     *output.last().unwrap()
 }
 
