@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate aoc_runner_derive;
 
-use std::collections::{HashSet};
+use std::collections::HashSet;
 
 mod intcode;
 mod intersectin_wires;
@@ -102,6 +102,82 @@ pub fn generate_better_passwords_in_range((start, end): &(Vec<u8>, Vec<u8>)) -> 
         .filter(|c| has_single_double(c))
         .filter(|c| *c > start && *c < end)
         .count()
+}
+
+use std::collections::HashMap;
+
+#[aoc_generator(day6)]
+pub fn get_orbits(orbits: &str) -> HashMap<String, HashSet<String>> {
+    let mut neighbours = HashMap::new();
+
+    for (orbited, orbit) in orbits.lines().map(|x| {
+        let mut foo = x.split(")");
+        (foo.next().unwrap(), foo.next().unwrap())
+    }) {
+        neighbours
+            .entry(orbited.to_owned())
+            .or_insert_with(HashSet::new)
+            .insert(orbit.to_owned());
+        neighbours
+            .entry(orbit.to_owned())
+            .or_insert_with(HashSet::new)
+            .insert(orbited.to_owned());
+    }
+    neighbours
+}
+
+fn get_lengths(
+    graph: &HashMap<String, HashSet<String>>,
+    start: String,
+    stop_at: Option<&str>,
+) -> HashMap<String, u64> {
+    let mut lens = HashMap::new();
+    let mut current_set = HashSet::new();
+    current_set.insert(start.clone());
+    lens.insert(start, 0);
+    let mut curr_len = 0;
+
+    let mut visited = HashSet::new();
+
+    loop {
+        let mut new_set = HashSet::new();
+        for item in current_set {
+            if !visited.contains(&item) {
+                if let Some(childs) = graph.get(&item) {
+                    for child in childs {
+                        if !visited.contains(&item) {
+                            new_set.insert(child.to_owned());
+                        }
+                    }
+                }
+                visited.insert(item.clone());
+                lens.insert(item, curr_len);
+            }
+        }
+        if let Some(stop_at) = stop_at {
+            if visited.contains(stop_at) {
+                break;
+            }
+        }
+        if new_set.is_empty() {
+            break;
+        }
+        current_set = new_set;
+        curr_len += 1;
+    }
+    lens
+}
+
+#[aoc(day6, part1)]
+pub fn count_orbits(graph: &HashMap<String, HashSet<String>>) -> u64 {
+    let lens = get_lengths(graph, "COM".to_owned(), None);
+    lens.values().copied().sum()
+}
+
+#[aoc(day6, part2)]
+pub fn hops_to_santa(graph: &HashMap<String, HashSet<String>>) -> u64 {
+    let lens = get_lengths(graph, "YOU".to_owned(), Some("SAN"));
+    lens.get("SAN").expect("santa not found") - 2
 }
 
 aoc_lib! { year = 2019 }
