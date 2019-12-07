@@ -323,100 +323,91 @@ pub fn intcode_thermal_radiators(code: &[i64]) -> i64 {
     *computer.output.last().unwrap()
 }
 
-fn permutations(offset: u8) -> Vec<[u8; 5]> {
-    let mut permutations = Vec::new();
-    for fir in 0..=4 {
-        for s in 0..=4 {
-            for t in 0..=4 {
-                for fo in 0..=4 {
-                    for fif in 0..=4 {
-                        if s != fir
-                            && t != fir
-                            && t != s
-                            && fo != fir
-                            && fo != s
-                            && fo != t
-                            && fif != fir
-                            && fif != s
-                            && fif != t
-                            && fif != fo
-                        {
-                            permutations.push([
-                                fir + offset,
-                                s + offset,
-                                t + offset,
-                                fo + offset,
-                                fif + offset,
-                            ])
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    permutations
-}
-
-fn run_amps(phase_scale: &[u8], code: &[i64]) -> i64 {
-    let mut current_output = 0;
-    for i in 0..=4 {
-        let mut computer = IntcodeComputer::new(Vec::from(code));
-        computer.add_input(phase_scale[i] as i64);
-        computer.add_input(current_output);
-        computer.run();
-        current_output = computer.output[0];
-    }
-    current_output
-}
+use itertools::Itertools;
 
 #[aoc(day7, part1)]
 pub fn amplify_the_signal(code: &[i64]) -> i64 {
-    let permutations = permutations(0);
-    permutations
-        .iter()
-        .map(|c| run_amps(c, code))
+    (0..5)
+        .permutations(5)
+        .map(|c| run_amps(&c, code))
         .max()
         .expect("No permutation")
 }
 
-fn run_feedbacked_amps(phase_scale: &[u8], code: &[i64]) -> i64 {
-    let mut computers = Vec::new();
-    for _ in 0..5 {
-        computers.push(IntcodeComputer::new(Vec::from(code)));
-    }
-    for (i, computer) in computers.iter_mut().enumerate() {
-        computer.add_input(phase_scale[i] as i64);
-    }
-    computers[0].add_input(0);
-    loop {
-        let mut states = [IntcodeState::Ready; 5];
+fn run_amps(phase_scale: &[u8], code: &[i64]) -> i64 {
+    let computers: Vec<_> = (0..5)
+        .map(|_| IntcodeComputer::new(Vec::from(code)))
+        .map(RefCell::new)
+        .collect();
+    prepare_amps(&computers, phase_scale);
+    computers[0].borrow_mut().add_input(0);
 
-        for i in 0..5 {
-            let new_state = computers[i].step();
-            states[i] = new_state;
-            match new_state {
-                IntcodeState::Outputed => {
-                    let new_input = computers[i].last_output().unwrap();
-                    computers[(i + 1) % 5].add_input(new_input)
+    let mut links = HashMap::new();
+    links.insert(0, vec![1]);
+    links.insert(1, vec![2]);
+    links.insert(2, vec![3]);
+    links.insert(3, vec![4]);
+
+    run_network(&computers, &links);
+
+    let x = computers[4].borrow().last_output().unwrap();
+    x
+}
+
+use std::cell::RefCell;
+use std::collections::HashMap;
+fn run_network(computers: &[RefCell<IntcodeComputer>], links: &HashMap<usize, Vec<usize>>) {
+    loop {
+        let mut all_finished = true;
+        for (i, computer) in computers.iter().enumerate() {
+            let new_state = computer.borrow_mut().step();
+            all_finished &= new_state == IntcodeState::Finished;
+            if let IntcodeState::Outputed = new_state {
+                let new_input = computer.borrow().last_output().unwrap();
+                if let Some(linked) = links.get(&i) {
+                    for linked in linked {
+                        computers[*linked].borrow_mut().add_input(new_input);
+                    }
                 }
-                _ => (),
             }
         }
-
-        if states.iter().all(|c| *c == IntcodeState::Finished) {
+        if all_finished {
             break;
         }
     }
-
-    *computers[4].output.last().unwrap()
 }
+fn prepare_amps(computers: &[RefCell<IntcodeComputer>], phase_scale: &[u8]) {
+    for (computer, phase) in computers.iter().zip(phase_scale) {
+        computer.borrow_mut().add_input(*phase as i64)
+    }
+}
+
+fn run_feedbacked_amps(phase_scale: &[u8], code: &[i64]) -> i64 {
+    let computers: Vec<_> = (0..5)
+        .map(|_| IntcodeComputer::new(Vec::from(code)))
+        .map(RefCell::from)
+        .collect();
+    prepare_amps(&computers, phase_scale);
+    computers[0].borrow_mut().add_input(0);
+
+    let mut links = HashMap::new();
+    links.insert(0, vec![1]);
+    links.insert(1, vec![2]);
+    links.insert(2, vec![3]);
+    links.insert(3, vec![4]);
+    links.insert(4, vec![0]);
+
+    run_network(&computers, &links);
+
+    let x = computers[4].borrow().last_output().unwrap();
+    x
+}
+
 #[aoc(day7, part2)]
 pub fn amplify_the_signal_with_feedback(code: &[i64]) -> i64 {
-    let permutations = permutations(5);
-    permutations
-        .iter()
-        .map(|c| run_feedbacked_amps(c, code))
+    (5..10)
+        .permutations(5)
+        .map(|c| run_feedbacked_amps(&c, code))
         .max()
         .expect("No permutation")
 }
