@@ -51,6 +51,7 @@ pub fn find_good_code(initial_memory: &[u64]) -> Result<u64, String> {
     Err("No pair found".to_owned())
 }
 
+#[aoc_generator(day7)]
 #[aoc_generator(day5)]
 pub fn parse_intcode(code: &str) -> Vec<i64> {
     code.split(",").map(|c| c.parse().unwrap()).collect()
@@ -86,6 +87,12 @@ impl Opcode {
         match self {
             Opcode::Exit => false,
             _ => true,
+        }
+    }
+    fn needs_input(&self) -> bool {
+        match self {
+            Opcode::Input => true,
+            _ => false,
         }
     }
 }
@@ -228,39 +235,188 @@ fn exec_instr(
     (param.op.more(), new_ip)
 }
 
-fn run_intcode_program(mut memory: Vec<i64>, mut input: VecDeque<i64>) -> Vec<i64> {
-    let mut output = Vec::new();
-    
-    let mut instruction_pointer = 0;
-    loop {
-        let (instr, offset) = get_instruction(&memory[instruction_pointer..]).expect("invalid instruction");
-        let (cont, new_ip) = exec_instr(instr, &mut memory, &mut input, &mut output);
-        if !cont {
-            break;
-        }
-        match new_ip {
-            Some(i) => instruction_pointer = i,
-            None => instruction_pointer += offset,
-        };
-    }
+struct IntcodeComputer {
+    input: VecDeque<i64>,
+    pub output: Vec<i64>,
+    memory: Vec<i64>,
 
-    output
+    instruction_pointer: usize,
+    finished: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum IntcodeState {
+    Ready,
+    NeedsInput,
+    Finished,
+    Outputed,
+}
+
+impl IntcodeComputer {
+    fn new(code: Vec<i64>) -> IntcodeComputer {
+        IntcodeComputer {
+            instruction_pointer: 0,
+            finished: false,
+            memory: code,
+            input: VecDeque::new(),
+            output: Vec::new(),
+        }
+    }
+    fn run(&mut self) {
+        loop {
+            match self.step() {
+                IntcodeState::Finished => break,
+                IntcodeState::Ready | IntcodeState::Outputed => continue,
+                IntcodeState::NeedsInput => panic!("Input needed"),
+            }
+        }
+    }
+    fn last_output(&self) -> Option<i64> {
+        self.output.last().copied()
+    }
+    fn add_input(&mut self, value: i64) {
+        self.input.push_back(value);
+    }
+    fn step(&mut self) -> IntcodeState {
+        if self.finished {
+            IntcodeState::Finished
+        } else {
+            let (instr, offset) =
+                get_instruction(&self.memory[self.instruction_pointer..]).expect("invalid instr");
+            let op = instr.op;
+            if op.needs_input() && self.input.is_empty() {
+                return IntcodeState::NeedsInput;
+            }
+            let (cont, new_ip) =
+                exec_instr(instr, &mut self.memory, &mut self.input, &mut self.output);
+            if !cont {
+                self.finished = true;
+                return IntcodeState::Finished;
+            }
+            match new_ip {
+                Some(i) => self.instruction_pointer = i,
+                None => self.instruction_pointer += offset,
+            }
+            match op {
+                Opcode::Output => IntcodeState::Outputed,
+                _ => IntcodeState::Ready,
+            }
+        }
+    }
 }
 
 #[aoc(day5, part1)]
 pub fn execute_better_intcode(code: &[i64]) -> i64 {
-    let memory = Vec::from(code);
-    let input = VecDeque::from(vec![1]);
-    let output = run_intcode_program(memory, input);
+    let mut computer = IntcodeComputer::new(Vec::from(code));
+    computer.add_input(1);
+    computer.run();
 
-    *output.last().unwrap()
+    *computer.output.last().unwrap()
 }
 
 #[aoc(day5, part2)]
 pub fn intcode_thermal_radiators(code: &[i64]) -> i64 {
-    let memory = Vec::from(code);
-    let input = VecDeque::from(vec![5]);
-    let output = run_intcode_program(memory, input);
+    let mut computer = IntcodeComputer::new(Vec::from(code));
+    computer.add_input(5);
+    computer.run();
 
-    *output.last().unwrap()
+    *computer.output.last().unwrap()
+}
+
+fn permutations(offset: u8) -> Vec<[u8; 5]> {
+    let mut permutations = Vec::new();
+    for fir in 0..=4 {
+        for s in 0..=4 {
+            for t in 0..=4 {
+                for fo in 0..=4 {
+                    for fif in 0..=4 {
+                        if s != fir
+                            && t != fir
+                            && t != s
+                            && fo != fir
+                            && fo != s
+                            && fo != t
+                            && fif != fir
+                            && fif != s
+                            && fif != t
+                            && fif != fo
+                        {
+                            permutations.push([
+                                fir + offset,
+                                s + offset,
+                                t + offset,
+                                fo + offset,
+                                fif + offset,
+                            ])
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    permutations
+}
+
+fn run_amps(phase_scale: &[u8], code: &[i64]) -> i64 {
+    let mut current_output = 0;
+    for i in 0..=4 {
+        let mut computer = IntcodeComputer::new(Vec::from(code));
+        computer.add_input(phase_scale[i] as i64);
+        computer.add_input(current_output);
+        computer.run();
+        current_output = computer.output[0];
+    }
+    current_output
+}
+
+#[aoc(day7, part1)]
+pub fn amplify_the_signal(code: &[i64]) -> i64 {
+    let permutations = permutations(0);
+    permutations
+        .iter()
+        .map(|c| run_amps(c, code))
+        .max()
+        .expect("No permutation")
+}
+
+fn run_feedbacked_amps(phase_scale: &[u8], code: &[i64]) -> i64 {
+    let mut computers = Vec::new();
+    for _ in 0..5 {
+        computers.push(IntcodeComputer::new(Vec::from(code)));
+    }
+    for (i, computer) in computers.iter_mut().enumerate() {
+        computer.add_input(phase_scale[i] as i64);
+    }
+    computers[0].add_input(0);
+    loop {
+        let mut states = [IntcodeState::Ready; 5];
+
+        for i in 0..5 {
+            let new_state = computers[i].step();
+            states[i] = new_state;
+            match new_state {
+                IntcodeState::Outputed => {
+                    let new_input = computers[i].last_output().unwrap();
+                    computers[(i + 1) % 5].add_input(new_input)
+                }
+                _ => (),
+            }
+        }
+
+        if states.iter().all(|c| *c == IntcodeState::Finished) {
+            break;
+        }
+    }
+
+    *computers[4].output.last().unwrap()
+}
+#[aoc(day7, part2)]
+pub fn amplify_the_signal_with_feedback(code: &[i64]) -> i64 {
+    let permutations = permutations(5);
+    permutations
+        .iter()
+        .map(|c| run_feedbacked_amps(c, code))
+        .max()
+        .expect("No permutation")
 }
