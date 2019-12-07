@@ -131,16 +131,16 @@ fn get_lengths<'a, 'c: 'a>(
     start: &'c str,
     stop_at: Option<&'c str>,
 ) -> HashMap<&'a str, u64> {
-    let mut lens = HashMap::new();
+    let mut lens = HashMap::with_capacity(graph.len());
     let mut current_set = HashSet::new();
     current_set.insert(start);
     lens.insert(start, 0);
     let mut curr_len = 0;
 
-    let mut visited = HashSet::new();
+    let mut visited = HashSet::with_capacity(graph.len());
 
     loop {
-        let mut new_set = HashSet::new();
+        let mut new_set = HashSet::with_capacity(current_set.len());
         for item in current_set {
             if !visited.contains(&item) {
                 if let Some(childs) = graph.get(item) {
