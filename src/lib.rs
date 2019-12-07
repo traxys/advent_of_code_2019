@@ -126,14 +126,14 @@ pub fn get_orbits(orbits: &str) -> HashMap<String, HashSet<String>> {
     neighbours
 }
 
-fn get_lengths(
-    graph: &HashMap<String, HashSet<String>>,
-    start: String,
-    stop_at: Option<&str>,
-) -> HashMap<String, u64> {
+fn get_lengths<'a, 'c: 'a>(
+    graph: &'a HashMap<String, HashSet<String>>,
+    start: &'c str,
+    stop_at: Option<&'c str>,
+) -> HashMap<&'a str, u64> {
     let mut lens = HashMap::new();
     let mut current_set = HashSet::new();
-    current_set.insert(start.clone());
+    current_set.insert(start);
     lens.insert(start, 0);
     let mut curr_len = 0;
 
@@ -143,10 +143,10 @@ fn get_lengths(
         let mut new_set = HashSet::new();
         for item in current_set {
             if !visited.contains(&item) {
-                if let Some(childs) = graph.get(&item) {
+                if let Some(childs) = graph.get(item) {
                     for child in childs {
                         if !visited.contains(&item) {
-                            new_set.insert(child.to_owned());
+                            new_set.insert(child.as_str());
                         }
                     }
                 }
@@ -170,13 +170,13 @@ fn get_lengths(
 
 #[aoc(day6, part1)]
 pub fn count_orbits(graph: &HashMap<String, HashSet<String>>) -> u64 {
-    let lens = get_lengths(graph, "COM".to_owned(), None);
+    let lens = get_lengths(graph, "COM", None);
     lens.values().copied().sum()
 }
 
 #[aoc(day6, part2)]
 pub fn hops_to_santa(graph: &HashMap<String, HashSet<String>>) -> u64 {
-    let lens = get_lengths(graph, "YOU".to_owned(), Some("SAN"));
+    let lens = get_lengths(graph, "YOU", Some("SAN"));
     lens.get("SAN").expect("santa not found") - 2
 }
 
