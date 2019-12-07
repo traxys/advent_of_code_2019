@@ -38,24 +38,28 @@ pub fn fuel_of_fuels(input: &str) -> i64 {
 }
 
 #[aoc_generator(day4)]
-pub fn get_range(range: &str) -> (Vec<u8>, Vec<u8>) {
+pub fn get_range(range: &str) -> (Password, Password) {
     let mut bounds = range
         .split("-")
         .map(|s| s.chars().map(|x| x.to_digit(10).unwrap() as u8).collect());
     (bounds.next().unwrap(), bounds.next().unwrap())
 }
 
-fn generate_passwords(first_digit: u8, end_digit: u8, len: usize) -> HashSet<Vec<u8>> {
+type Password = arrayvec::ArrayVec<[u8; 6]>;
+
+fn generate_passwords(first_digit: u8, end_digit: u8, len: usize) -> HashSet<Password> {
     let mut possibilities = HashSet::new();
     for i in first_digit..=end_digit {
-        possibilities.insert(vec![i]);
+        let mut pass = Password::new();
+        unsafe { pass.push_unchecked(i) };
+        possibilities.insert(pass);
     }
     for _ in 1..len {
         let mut new_possibilites = HashSet::new();
         for possibility in possibilities {
             for x in *possibility.last().unwrap()..=9 {
                 let mut new_possibility = possibility.clone();
-                new_possibility.push(x);
+                unsafe { new_possibility.push_unchecked(x) };
                 new_possibilites.insert(new_possibility);
             }
         }
@@ -65,7 +69,7 @@ fn generate_passwords(first_digit: u8, end_digit: u8, len: usize) -> HashSet<Vec
 }
 
 #[aoc(day4, part1)]
-pub fn count_passwords_in_range((start, end): &(Vec<u8>, Vec<u8>)) -> usize {
+pub fn count_passwords_in_range((start, end): &(Password, Password)) -> usize {
     generate_passwords(start[0], end[0], 6)
         .iter()
         .filter(|x| doubles(x).any(|_| true))
@@ -96,7 +100,7 @@ fn has_single_double(choice: &[u8]) -> bool {
 }
 
 #[aoc(day4, part2)]
-pub fn generate_better_passwords_in_range((start, end): &(Vec<u8>, Vec<u8>)) -> usize {
+pub fn generate_better_passwords_in_range((start, end): &(Password, Password)) -> usize {
     generate_passwords(start[0], end[0], 6)
         .iter()
         .filter(|c| has_single_double(c))
@@ -104,8 +108,8 @@ pub fn generate_better_passwords_in_range((start, end): &(Vec<u8>, Vec<u8>)) -> 
         .count()
 }
 
-use std::collections::HashMap;
 use arrayvec::ArrayString;
+use std::collections::HashMap;
 
 type OrbitNode = ArrayString<[u8; 4]>;
 type OrbitGraph = HashMap<OrbitNode, HashSet<OrbitNode>>;
