@@ -62,6 +62,64 @@ enum InstructionMode {
     Position,
     Immediate,
 }
+
+/*macro_rules! define_opcodes {
+    (
+        @define ($($d_stack:ident,)*), 
+        @arg_count ($($a_stack:tt,)*),
+        $name:ident {args: $arg_count:expr}
+        $($rest:tt)*
+    )=> {
+        define_opcodes!{
+            @define ($($d_stack,)*, $name), 
+            @arg_count ($($a_stack:tt,)* NewOpcode::$name => $arg_count,), 
+            $($rest:tt)*
+        }
+    };
+    (
+        @define ($($d_stack:ident,)*),
+        @arg_count ($($a_stack:tt)*), $(;)?
+    ) => {
+        #[derive(Copy, Clone, PartialEq, Eq, Debug)]
+        enum NewOpcode {
+            $(
+                $d_stack
+            ),*
+        }
+        impl NewOpcode {
+            fn arg_count(&self) -> usize {
+                match &self {
+                $(
+                    $a_stack
+                ),*
+                }
+            }
+        }
+    };
+    (
+        @define ($($d_stack:ident,)*), 
+        @arg_count ($($a_stack:tt)*), 
+        $($rest:tt)*
+    ) => {
+        compile_error!("invalid input!");
+    };
+    ($($rest:tt)*) => {
+        define_opcodes!{@define (), @arg_count (), $($rest:tt)*}
+    };
+}
+
+trace_macros!(true);
+define_opcodes!{
+    Test {
+        args: 1
+    }
+    Please {
+        args: 2
+    }
+}
+trace_macros!(false);
+*/
+
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 enum Opcode {
     JumpIfTrue,
