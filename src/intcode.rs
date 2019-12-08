@@ -65,14 +65,14 @@ enum InstructionMode {
 
 /*macro_rules! define_opcodes {
     (
-        @define ($($d_stack:ident,)*), 
+        @define ($($d_stack:ident,)*),
         @arg_count ($($a_stack:tt,)*),
         $name:ident {args: $arg_count:expr}
         $($rest:tt)*
     )=> {
         define_opcodes!{
-            @define ($($d_stack,)*, $name), 
-            @arg_count ($($a_stack:tt,)* NewOpcode::$name => $arg_count,), 
+            @define ($($d_stack,)*, $name),
+            @arg_count ($($a_stack:tt,)* NewOpcode::$name => $arg_count,),
             $($rest:tt)*
         }
     };
@@ -97,8 +97,8 @@ enum InstructionMode {
         }
     };
     (
-        @define ($($d_stack:ident,)*), 
-        @arg_count ($($a_stack:tt)*), 
+        @define ($($d_stack:ident,)*),
+        @arg_count ($($a_stack:tt)*),
         $($rest:tt)*
     ) => {
         compile_error!("invalid input!");

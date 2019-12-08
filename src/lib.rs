@@ -251,7 +251,7 @@ fn create_image(encoded: &Vec<Layer>) -> Layer {
     let mut remain = 25 * 6;
     for layer in encoded {
         if remain == 0 {
-            break
+            break;
         }
         for (i, line) in layer.iter().enumerate() {
             for (j, c) in line.iter().enumerate() {
