@@ -325,35 +325,6 @@ pub fn intcode_thermal_radiators(code: &[i64]) -> i64 {
 
 use itertools::Itertools;
 
-#[aoc(day7, part1)]
-pub fn amplify_the_signal(code: &[i64]) -> i64 {
-    (0..5)
-        .permutations(5)
-        .map(|c| run_amps(&c, code))
-        .max()
-        .expect("No permutation")
-}
-
-fn run_amps(phase_scale: &[u8], code: &[i64]) -> i64 {
-    let computers: Vec<_> = (0..5)
-        .map(|_| IntcodeComputer::new(Vec::from(code)))
-        .map(RefCell::new)
-        .collect();
-    prepare_amps(&computers, phase_scale);
-    computers[0].borrow_mut().add_input(0);
-
-    let mut links = HashMap::new();
-    links.insert(0, vec![1]);
-    links.insert(1, vec![2]);
-    links.insert(2, vec![3]);
-    links.insert(3, vec![4]);
-
-    run_network(&computers, &links);
-
-    let x = computers[4].borrow().last_output().unwrap();
-    x
-}
-
 use std::cell::RefCell;
 use std::collections::HashMap;
 fn run_network(computers: &[RefCell<IntcodeComputer>], links: &HashMap<usize, Vec<usize>>) {
@@ -376,10 +347,47 @@ fn run_network(computers: &[RefCell<IntcodeComputer>], links: &HashMap<usize, Ve
         }
     }
 }
+
+fn chain(first: usize, last: usize) -> HashMap<usize, Vec<usize>> {
+    let mut links = HashMap::new();
+    for x in first..last {
+        links.insert(x, vec![x + 1]);
+    }
+    links
+}
+
 fn prepare_amps(computers: &[RefCell<IntcodeComputer>], phase_scale: &[u8]) {
     for (computer, phase) in computers.iter().zip(phase_scale) {
         computer.borrow_mut().add_input(*phase as i64)
     }
+}
+fn run_amps(phase_scale: &[u8], code: &[i64]) -> i64 {
+    let computers: Vec<_> = (0..5)
+        .map(|_| IntcodeComputer::new(Vec::from(code)))
+        .map(RefCell::new)
+        .collect();
+    prepare_amps(&computers, phase_scale);
+    computers[0].borrow_mut().add_input(0);
+
+    run_network(&computers, &chain(0, 4));
+
+    let x = computers[4].borrow().last_output().unwrap();
+    x
+}
+
+#[aoc(day7, part1)]
+pub fn amplify_the_signal(code: &[i64]) -> i64 {
+    (0..5)
+        .permutations(5)
+        .map(|c| run_amps(&c, code))
+        .max()
+        .expect("No permutation")
+}
+
+fn looped(start: usize, end: usize) -> HashMap<usize, Vec<usize>> {
+    let mut chain = chain(start, end);
+    chain.insert(end, vec![start]);
+    chain
 }
 
 fn run_feedbacked_amps(phase_scale: &[u8], code: &[i64]) -> i64 {
@@ -390,14 +398,7 @@ fn run_feedbacked_amps(phase_scale: &[u8], code: &[i64]) -> i64 {
     prepare_amps(&computers, phase_scale);
     computers[0].borrow_mut().add_input(0);
 
-    let mut links = HashMap::new();
-    links.insert(0, vec![1]);
-    links.insert(1, vec![2]);
-    links.insert(2, vec![3]);
-    links.insert(3, vec![4]);
-    links.insert(4, vec![0]);
-
-    run_network(&computers, &links);
+    run_network(&computers, &looped(0, 4));
 
     let x = computers[4].borrow().last_output().unwrap();
     x
