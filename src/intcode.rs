@@ -63,84 +63,101 @@ enum InstructionMode {
     Immediate,
 }
 
-/*macro_rules! define_opcodes {
+macro_rules! define_opcodes_impl {
     (
-        @define ($($d_stack:ident,)*),
-        @arg_count ($($a_stack:tt,)*),
-        $name:ident {args: $arg_count:expr}
+        @define    ($($d_stack:ident),*),
+        @arg_count ($($k:path => $v:tt),*),
+        @from_code ($($c:expr => $op:path),*),
+        $name:ident {
+            args: $arg_count:expr,
+            opcode: $opcode:expr $(,)?
+        }
         $($rest:tt)*
     )=> {
-        define_opcodes!{
-            @define ($($d_stack,)*, $name),
-            @arg_count ($($a_stack:tt,)* NewOpcode::$name => $arg_count,),
-            $($rest:tt)*
+        define_opcodes_impl!{
+            @define    ($($d_stack,)* $name),
+            @arg_count ($($k => $v,)* Opcode::$name => $arg_count),
+            @from_code ($($c => $op,)* $opcode => Opcode::$name),
+            $($rest)*
         }
     };
     (
-        @define ($($d_stack:ident,)*),
-        @arg_count ($($a_stack:tt)*), $(;)?
+        @define    ($($d_stack:ident),*),
+        @arg_count ($($k:path => $v:tt),*),
+        @from_code ($($c:expr => $op:path),*),
     ) => {
         #[derive(Copy, Clone, PartialEq, Eq, Debug)]
-        enum NewOpcode {
+        enum Opcode {
             $(
                 $d_stack
             ),*
         }
-        impl NewOpcode {
+        impl Opcode {
             fn arg_count(&self) -> usize {
                 match &self {
                 $(
-                    $a_stack
+                    $k => $v
                 ),*
+                }
+            }
+            fn from_code(code: i64) -> Result<Self, ()> {
+                match code {
+                $(
+                    $c => Ok($op)
+                ),*,
+                    _ => return Err(()),
                 }
             }
         }
     };
-    (
-        @define ($($d_stack:ident,)*),
-        @arg_count ($($a_stack:tt)*),
-        $($rest:tt)*
-    ) => {
-        compile_error!("invalid input!");
-    };
+}
+
+macro_rules! define_opcodes {
     ($($rest:tt)*) => {
-        define_opcodes!{@define (), @arg_count (), $($rest:tt)*}
+        define_opcodes_impl!{@define (), @arg_count (), @from_code (), $($rest)*}
     };
 }
 
-trace_macros!(true);
-define_opcodes!{
-    Test {
-        args: 1
+define_opcodes! {
+    Add {
+        args: 3,
+        opcode: 01,
     }
-    Please {
-        args: 2
+    Mult {
+        args: 3,
+        opcode: 02,
+    }
+    Input {
+        args: 1,
+        opcode: 03,
+    }
+    Output {
+        args: 1,
+        opcode: 04,
+    }
+    JumpIfTrue {
+        args: 2,
+        opcode: 05,
+    }
+    JumpIfFalse {
+        args: 2,
+        opcode: 06,
+    }
+    LessThan {
+        args: 3,
+        opcode: 07,
+    }
+    Equals {
+        args: 3,
+        opcode: 08,
+    }
+    Exit {
+        args: 0,
+        opcode: 99,
     }
 }
-trace_macros!(false);
-*/
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-enum Opcode {
-    JumpIfTrue,
-    JumpIfFalse,
-    LessThan,
-    Equals,
-    Mult,
-    Add,
-    Input,
-    Output,
-    Exit,
-}
 impl Opcode {
-    fn arg_count(&self) -> usize {
-        match self {
-            Opcode::Mult | Opcode::Add | Opcode::LessThan | Opcode::Equals => 3,
-            Opcode::Input | Opcode::Output => 1,
-            Opcode::JumpIfFalse | Opcode::JumpIfTrue => 2,
-            Opcode::Exit => 0,
-        }
-    }
     fn more(&self) -> bool {
         match self {
             Opcode::Exit => false,
@@ -197,18 +214,8 @@ fn extract_from_opcode(
 
 fn get_instruction(code: &[i64]) -> Result<(Instruction, usize), String> {
     let instr = code[0];
-    let opcode = match instr % 100 {
-        01 => Opcode::Add,
-        02 => Opcode::Mult,
-        03 => Opcode::Input,
-        04 => Opcode::Output,
-        05 => Opcode::JumpIfTrue,
-        06 => Opcode::JumpIfFalse,
-        07 => Opcode::LessThan,
-        08 => Opcode::Equals,
-        99 => Opcode::Exit,
-        i => return Err(format!("No such opcode: {}", i)),
-    };
+    let raw_code = instr % 100;
+    let opcode = Opcode::from_code(raw_code).map_err(|_| format!("No such code: {}", raw_code))?;
     let mut modes_int = instr / 100;
     let mut modes = Vec::new();
     while modes_int != 0 {
@@ -230,6 +237,15 @@ fn resolve_arg(param: Parameter, code: &[i64]) -> i64 {
 
 use std::collections::VecDeque;
 
+macro_rules! arg {
+    (store_in($index:expr), $instr:expr, $memory:expr) => {
+        $memory[$instr.args[$index].value as usize]
+    };
+    (get($index:expr), $instr:expr, $memory:expr) => {
+        resolve_arg($instr.args[$index], $memory)
+    };
+}
+
 fn exec_instr(
     param: Instruction,
     code: &mut [i64],
@@ -238,42 +254,40 @@ fn exec_instr(
 ) -> (bool, Option<usize>) {
     let new_ip = match param.op {
         Opcode::Add => {
-            code[param.args[2].value as usize] =
-                resolve_arg(param.args[0], code) + resolve_arg(param.args[1], code);
+            arg!(store_in(2), param, code) = arg!(get(0), param, code) + arg!(get(1), param, code);
             None
         }
         Opcode::Mult => {
-            code[param.args[2].value as usize] =
-                resolve_arg(param.args[0], code) * resolve_arg(param.args[1], code);
+            arg!(store_in(2), param, code) = arg!(get(0), param, code) * arg!(get(1), param, code);
             None
         }
         Opcode::Input => {
             let value = input.pop_front().expect("No input");
-            code[param.args[0].value as usize] = value;
+            arg!(store_in(0), param, code) = value;
             None
         }
         Opcode::Output => {
-            ouput.push(resolve_arg(param.args[0], code));
+            ouput.push(arg!(get(0), param, code));
             None
         }
         Opcode::Exit => None,
         Opcode::JumpIfTrue => {
-            if resolve_arg(param.args[0], code) != 0 {
-                Some(resolve_arg(param.args[1], code) as usize)
+            if arg!(get(0), param, code) != 0 {
+                Some(arg!(get(1), param, code) as usize)
             } else {
                 None
             }
         }
         Opcode::JumpIfFalse => {
-            if resolve_arg(param.args[0], code) == 0 {
-                Some(resolve_arg(param.args[1], code) as usize)
+            if arg!(get(0), param, code) == 0 {
+                Some(arg!(get(1), param, code) as usize)
             } else {
                 None
             }
         }
         Opcode::LessThan => {
-            code[param.args[2].value as usize] =
-                if resolve_arg(param.args[0], code) < resolve_arg(param.args[1], code) {
+            arg!(store_in(2), param, code) =
+                if arg!(get(0), param, code) < arg!(get(1), param, code) {
                     1
                 } else {
                     0
@@ -281,8 +295,8 @@ fn exec_instr(
             None
         }
         Opcode::Equals => {
-            code[param.args[2].value as usize] =
-                if resolve_arg(param.args[0], code) == resolve_arg(param.args[1], code) {
+            arg!(store_in(2), param, code) =
+                if arg!(get(0), param, code) == arg!(get(1), param, code) {
                     1
                 } else {
                     0
