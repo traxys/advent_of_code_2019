@@ -135,16 +135,10 @@ struct Parameter {
 }
 
 impl Parameter {
-    fn new(param_num: usize, modes: &[InstructionMode], code: &[i64]) -> Parameter {
-        Parameter {
-            value: code[param_num + 1],
-            mode: modes[param_num],
-        }
-    }
     fn extract_args(count: usize, modes: &[InstructionMode], code: &[i64]) -> ArgArray {
         let mut args = ArgArray::new();
-        for i in 0..count {
-            unsafe { args.push_unchecked(Parameter::new(i, modes, code)) };
+        for (&value, &mode) in code.iter().skip(1).zip(modes).take(count) {
+            unsafe { args.push_unchecked(Parameter { value, mode }) }
         }
         args
     }
