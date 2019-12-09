@@ -212,99 +212,104 @@ fn extract_from_opcode(
     )
 }
 
-fn get_instruction(code: &[i64]) -> Result<(Instruction, usize), String> {
-    let instr = code[0];
-    let raw_code = instr % 100;
-    let opcode = Opcode::from_code(raw_code).map_err(|_| format!("No such code: {}", raw_code))?;
-    let mut modes_int = instr / 100;
-    let mut modes = Vec::new();
-    while modes_int != 0 {
-        match modes_int % 10 {
-            0 => modes.push(InstructionMode::Position),
-            1 => modes.push(InstructionMode::Immediate),
-            i => return Err(format!("Invalid mode: {}", i)),
+impl Instruction {
+    fn from_code(code: &[i64]) -> Result<(Instruction, usize), String> {
+        let instr = code[0];
+        let raw_code = instr % 100;
+        let opcode =
+            Opcode::from_code(raw_code).map_err(|_| format!("No such code: {}", raw_code))?;
+        let mut modes_int = instr / 100;
+        let mut modes = Vec::new();
+        while modes_int != 0 {
+            match modes_int % 10 {
+                0 => modes.push(InstructionMode::Position),
+                1 => modes.push(InstructionMode::Immediate),
+                i => return Err(format!("Invalid mode: {}", i)),
+            }
+            modes_int /= 10;
         }
-        modes_int /= 10;
+        Ok(extract_from_opcode(opcode, &modes, code))
     }
-    Ok(extract_from_opcode(opcode, &modes, code))
-}
-fn resolve_arg(param: Parameter, code: &[i64]) -> i64 {
-    match param.mode {
-        InstructionMode::Immediate => param.value,
-        InstructionMode::Position => code[param.value as usize],
+    fn resolve_arg(&self, index: usize, computer: &IntcodeComputer) -> i64 {
+        let param = self.args[index];
+        match param.mode {
+            InstructionMode::Immediate => param.value,
+            InstructionMode::Position => computer.get(param.value as usize),
+        }
+    }
+    fn arg_as_index(&self, index: usize) -> usize {
+        self.args[index].value as usize
     }
 }
 
 use std::collections::VecDeque;
 
-macro_rules! arg {
-    (store_in($index:expr), $instr:expr, $memory:expr) => {
-        $memory[$instr.args[$index].value as usize]
-    };
-    (get($index:expr), $instr:expr, $memory:expr) => {
-        resolve_arg($instr.args[$index], $memory)
-    };
-}
-
-fn exec_instr(
-    param: Instruction,
-    code: &mut [i64],
-    input: &mut VecDeque<i64>,
-    ouput: &mut Vec<i64>,
-) -> (bool, Option<usize>) {
-    let new_ip = match param.op {
-        Opcode::Add => {
-            arg!(store_in(2), param, code) = arg!(get(0), param, code) + arg!(get(1), param, code);
-            None
-        }
-        Opcode::Mult => {
-            arg!(store_in(2), param, code) = arg!(get(0), param, code) * arg!(get(1), param, code);
-            None
-        }
-        Opcode::Input => {
-            let value = input.pop_front().expect("No input");
-            arg!(store_in(0), param, code) = value;
-            None
-        }
-        Opcode::Output => {
-            ouput.push(arg!(get(0), param, code));
-            None
-        }
-        Opcode::Exit => None,
-        Opcode::JumpIfTrue => {
-            if arg!(get(0), param, code) != 0 {
-                Some(arg!(get(1), param, code) as usize)
-            } else {
+impl IntcodeComputer {
+    fn exec_instr(&mut self, param: Instruction) -> (bool, Option<usize>) {
+        let new_ip = match param.op {
+            Opcode::Add => {
+                self.set(
+                    param.arg_as_index(2),
+                    param.resolve_arg(0, self) + param.resolve_arg(1, self),
+                );
                 None
             }
-        }
-        Opcode::JumpIfFalse => {
-            if arg!(get(0), param, code) == 0 {
-                Some(arg!(get(1), param, code) as usize)
-            } else {
+            Opcode::Mult => {
+                self.set(
+                    param.arg_as_index(2),
+                    param.resolve_arg(0, self) * param.resolve_arg(1, self),
+                );
                 None
             }
-        }
-        Opcode::LessThan => {
-            arg!(store_in(2), param, code) =
-                if arg!(get(0), param, code) < arg!(get(1), param, code) {
-                    1
+            Opcode::Input => {
+                let value = self.input.pop_front().expect("No input");
+                self.set(param.arg_as_index(0), value);
+                None
+            }
+            Opcode::Output => {
+                self.output.push(param.resolve_arg(0, self));
+                None
+            }
+            Opcode::Exit => None,
+            Opcode::JumpIfTrue => {
+                if param.resolve_arg(0, self) != 0 {
+                    Some(param.resolve_arg(1, self) as usize)
                 } else {
-                    0
-                };
-            None
-        }
-        Opcode::Equals => {
-            arg!(store_in(2), param, code) =
-                if arg!(get(0), param, code) == arg!(get(1), param, code) {
-                    1
+                    None
+                }
+            }
+            Opcode::JumpIfFalse => {
+                if param.resolve_arg(0, self) == 0 {
+                    Some(param.resolve_arg(1, self) as usize)
                 } else {
-                    0
-                };
-            None
-        }
-    };
-    (param.op.more(), new_ip)
+                    None
+                }
+            }
+            Opcode::LessThan => {
+                self.set(
+                    param.arg_as_index(2),
+                    if param.resolve_arg(0, self) < param.resolve_arg(1, self) {
+                        1
+                    } else {
+                        0
+                    },
+                );
+                None
+            }
+            Opcode::Equals => {
+                self.set(
+                    param.arg_as_index(2),
+                    if param.resolve_arg(0, self) == param.resolve_arg(1, self) {
+                        1
+                    } else {
+                        0
+                    },
+                );
+                None
+            }
+        };
+        (param.op.more(), new_ip)
+    }
 }
 
 struct IntcodeComputer {
@@ -325,6 +330,18 @@ enum IntcodeState {
 }
 
 impl IntcodeComputer {
+    #[inline]
+    fn get(&self, index: usize) -> i64 {
+        *self.memory.get(index).unwrap_or(&0)
+    }
+    #[inline]
+    fn set(&mut self, index: usize, value: i64) {
+        if self.memory.len() <= index {
+            self.memory.resize(index + 1, 0);
+        }
+        self.memory[index] = value;
+    }
+
     fn new(code: Vec<i64>) -> IntcodeComputer {
         IntcodeComputer {
             instruction_pointer: 0,
@@ -353,14 +370,13 @@ impl IntcodeComputer {
         if self.finished {
             IntcodeState::Finished
         } else {
-            let (instr, offset) =
-                get_instruction(&self.memory[self.instruction_pointer..]).expect("invalid instr");
+            let (instr, offset) = Instruction::from_code(&self.memory[self.instruction_pointer..])
+                .expect("invalid instr");
             let op = instr.op;
             if op.needs_input() && self.input.is_empty() {
                 return IntcodeState::NeedsInput;
             }
-            let (cont, new_ip) =
-                exec_instr(instr, &mut self.memory, &mut self.input, &mut self.output);
+            let (cont, new_ip) = self.exec_instr(instr);
             if !cont {
                 self.finished = true;
                 return IntcodeState::Finished;
