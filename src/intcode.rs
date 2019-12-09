@@ -51,16 +51,11 @@ pub fn find_good_code(initial_memory: &[u64]) -> Result<u64, String> {
     Err("No pair found".to_owned())
 }
 
+#[aoc_generator(day9)]
 #[aoc_generator(day7)]
 #[aoc_generator(day5)]
 pub fn parse_intcode(code: &str) -> Vec<i64> {
     code.split(",").map(|c| c.parse().unwrap()).collect()
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-enum InstructionMode {
-    Position,
-    Immediate,
 }
 
 macro_rules! define_opcodes_impl {
@@ -151,6 +146,10 @@ define_opcodes! {
         args: 3,
         opcode: 08,
     }
+    RelativeUpdate {
+        args: 1,
+        opcode: 09,
+    }
     Exit {
         args: 0,
         opcode: 99,
@@ -171,6 +170,13 @@ impl Opcode {
         }
     }
 }
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+enum InstructionMode {
+    Position,
+    Immediate,
+    Relative,
+}
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 struct Instruction {
     op: Opcode,
@@ -224,6 +230,7 @@ impl Instruction {
             match modes_int % 10 {
                 0 => modes.push(InstructionMode::Position),
                 1 => modes.push(InstructionMode::Immediate),
+                2 => modes.push(InstructionMode::Relative),
                 i => return Err(format!("Invalid mode: {}", i)),
             }
             modes_int /= 10;
@@ -235,10 +242,16 @@ impl Instruction {
         match param.mode {
             InstructionMode::Immediate => param.value,
             InstructionMode::Position => computer.get(param.value as usize),
+            InstructionMode::Relative => computer.get(computer.resolve_relative(param.value)),
         }
     }
-    fn arg_as_index(&self, index: usize) -> usize {
-        self.args[index].value as usize
+    fn arg_as_index(&self, index: usize, computer: &IntcodeComputer) -> usize {
+        let param = self.args[index];
+        match param.mode {
+            InstructionMode::Position => param.value as usize,
+            InstructionMode::Relative => computer.resolve_relative(param.value),
+            mode => panic!("Invaild mode to index with: {:?}", mode),
+        }
     }
 }
 
@@ -249,21 +262,21 @@ impl IntcodeComputer {
         let new_ip = match param.op {
             Opcode::Add => {
                 self.set(
-                    param.arg_as_index(2),
+                    param.arg_as_index(2, self),
                     param.resolve_arg(0, self) + param.resolve_arg(1, self),
                 );
                 None
             }
             Opcode::Mult => {
                 self.set(
-                    param.arg_as_index(2),
+                    param.arg_as_index(2, self),
                     param.resolve_arg(0, self) * param.resolve_arg(1, self),
                 );
                 None
             }
             Opcode::Input => {
                 let value = self.input.pop_front().expect("No input");
-                self.set(param.arg_as_index(0), value);
+                self.set(param.arg_as_index(0, self), value);
                 None
             }
             Opcode::Output => {
@@ -287,7 +300,7 @@ impl IntcodeComputer {
             }
             Opcode::LessThan => {
                 self.set(
-                    param.arg_as_index(2),
+                    param.arg_as_index(2, self),
                     if param.resolve_arg(0, self) < param.resolve_arg(1, self) {
                         1
                     } else {
@@ -298,13 +311,17 @@ impl IntcodeComputer {
             }
             Opcode::Equals => {
                 self.set(
-                    param.arg_as_index(2),
+                    param.arg_as_index(2, self),
                     if param.resolve_arg(0, self) == param.resolve_arg(1, self) {
                         1
                     } else {
                         0
                     },
                 );
+                None
+            }
+            Opcode::RelativeUpdate => {
+                self.relative_base += param.resolve_arg(0, self);
                 None
             }
         };
@@ -316,6 +333,8 @@ struct IntcodeComputer {
     input: VecDeque<i64>,
     pub output: Vec<i64>,
     memory: Vec<i64>,
+
+    relative_base: i64,
 
     instruction_pointer: usize,
     finished: bool,
@@ -331,6 +350,10 @@ enum IntcodeState {
 
 impl IntcodeComputer {
     #[inline]
+    fn resolve_relative(&self, offset: i64) -> usize {
+        (self.relative_base + offset) as usize
+    }
+    #[inline]
     fn get(&self, index: usize) -> i64 {
         *self.memory.get(index).unwrap_or(&0)
     }
@@ -344,6 +367,7 @@ impl IntcodeComputer {
 
     fn new(code: Vec<i64>) -> IntcodeComputer {
         IntcodeComputer {
+            relative_base: 0,
             instruction_pointer: 0,
             finished: false,
             memory: code,
@@ -499,4 +523,21 @@ pub fn amplify_the_signal_with_feedback(code: &[i64]) -> i64 {
         .map(|c| run_feedbacked_amps(&c, code))
         .max()
         .expect("No permutation")
+}
+
+#[aoc(day9, part1)]
+pub fn test_boost(code: &[i64]) -> i64 {
+    let mut computer = IntcodeComputer::new(Vec::from(code));
+    computer.add_input(1);
+    computer.run();
+
+    computer.last_output().unwrap()
+}
+#[aoc(day9, part2)]
+pub fn find_coordinates(code: &[i64]) -> i64 {
+    let mut computer = IntcodeComputer::new(Vec::from(code));
+    computer.add_input(2);
+    computer.run();
+
+    computer.last_output().unwrap()
 }

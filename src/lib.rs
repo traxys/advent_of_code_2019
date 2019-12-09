@@ -3,8 +3,8 @@ extern crate aoc_runner_derive;
 
 use std::collections::HashSet;
 
-mod intcode;
-mod intersectin_wires;
+pub mod intcode;
+pub mod intersectin_wires;
 
 // use rayon::prelude::*;
 
