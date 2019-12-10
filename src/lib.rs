@@ -5,8 +5,7 @@ use std::collections::HashSet;
 
 pub mod intcode;
 pub mod intersectin_wires;
-
-// use rayon::prelude::*;
+pub mod asteroid;
 
 fn fuel_for_mass(mass: i64) -> i64 {
     (mass / 3) - 2
@@ -282,5 +281,6 @@ pub fn find_password_in_image(input: &Vec<Layer>) -> String {
             .format("\n")
     )
 }
+
 
 aoc_lib! { year = 2019 }
