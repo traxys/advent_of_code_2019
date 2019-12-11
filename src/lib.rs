@@ -7,6 +7,7 @@ pub mod asteroid;
 pub mod image;
 pub mod orbits;
 pub mod password;
+pub mod painting_robot;
 
 fn fuel_for_mass(mass: i64) -> i64 {
     (mass / 3) - 2

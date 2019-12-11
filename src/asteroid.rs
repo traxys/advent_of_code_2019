@@ -125,7 +125,9 @@ fn find_most_beacony(asteroids: &HashSet<Point>) -> (usize, HashMap<Line, HashSe
 }
 #[aoc(day10, part1)]
 pub fn find_beacon_asteroid(input: &HashSet<Point>) -> usize {
-    find_most_beacony(input).0
+    let (asteroids_in_sight, _, location) = find_most_beacony(input);
+    println!("Station is at: ({:#?})", location);
+    asteroids_in_sight
 }
 
 fn lesser_upper(source: Point, line: &HashSet<Point>) -> (Vec<Point>, Vec<Point>) {
@@ -160,7 +162,12 @@ fn lesser_upper(source: Point, line: &HashSet<Point>) -> (Vec<Point>, Vec<Point>
 
 #[aoc(day10, part2)]
 pub fn find_lasered(input: &HashSet<Point>) -> isize {
-    let (_, lines, station) = find_most_beacony(input);
+    let station = Point {
+        x: 26,
+        y: 36,
+    };
+    let (_, lines) = find_asteroid_in_view_from(station, input);
+    //let (_, lines, station) = find_most_beacony(input);
     let mut lines: Vec<_> = lines
         .into_iter()
         .map(|(l, line)| {
@@ -181,7 +188,6 @@ pub fn find_lasered(input: &HashSet<Point>) -> isize {
         for (more, less) in &mut lines {
             let side = if right { more } else { less };
             if let Some(point) = side.pop() {
-                //eprintln!("[{}] more ({}, {})", i, point.x, point.y);
                 i += 1;
                 if i == 200 {
                     break 'outer point;
