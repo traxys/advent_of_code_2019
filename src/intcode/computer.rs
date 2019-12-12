@@ -178,22 +178,6 @@ impl Instruction {
         }
         Ok(Instruction::create_with_op_and_modes(opcode, &modes, code))
     }
-    fn resolve_arg(&self, index: usize, computer: &IntcodeComputer) -> i64 {
-        let param = self.args[index];
-        match param.mode {
-            InstructionMode::Immediate => param.value,
-            InstructionMode::Position => computer.get(param.value as usize),
-            InstructionMode::Relative => computer.get(computer.resolve_relative(param.value)),
-        }
-    }
-    fn arg_as_index(&self, index: usize, computer: &IntcodeComputer) -> usize {
-        let param = self.args[index];
-        match param.mode {
-            InstructionMode::Position => param.value as usize,
-            InstructionMode::Relative => computer.resolve_relative(param.value),
-            mode => panic!("Invaild mode to index with: {:?}", mode),
-        }
-    }
 }
 
 pub struct IntcodeComputer {
@@ -221,11 +205,20 @@ impl IntcodeComputer {
         (self.relative_base + offset) as usize
     }
     #[inline]
-    fn get(&self, index: usize) -> i64 {
-        *self.memory.get(index).unwrap_or(&0)
+    fn get(&self, parameter: Parameter) -> i64 {
+        match parameter.mode {
+            InstructionMode::Relative => *self.memory.get(self.resolve_relative(parameter.value)).unwrap_or(&0),
+            InstructionMode::Position => *self.memory.get(parameter.value as usize).unwrap_or(&0),
+            InstructionMode::Immediate => parameter.value,
+        }
     }
     #[inline]
-    fn set(&mut self, index: usize, value: i64) {
+    fn set(&mut self, param: Parameter, value: i64) {
+        let index = match param.mode {
+            InstructionMode::Immediate => panic!("Can't resolve immediate mode in set"),
+            InstructionMode::Position => param.value as usize,
+            InstructionMode::Relative => self.resolve_relative(param.value),
+        };
         if self.memory.len() <= index {
             self.memory.resize(index + 1, 0);
         }
@@ -285,49 +278,44 @@ impl IntcodeComputer {
         }
     }
     fn exec_instr(&mut self, param: Instruction) -> (bool, Option<usize>) {
+        let args = param.args;
         let new_ip = match param.op {
             Opcode::Add => {
-                self.set(
-                    param.arg_as_index(2, self),
-                    param.resolve_arg(0, self) + param.resolve_arg(1, self),
-                );
+                self.set(args[2], self.get(args[0]) + self.get(args[1]));
                 None
             }
             Opcode::Mult => {
-                self.set(
-                    param.arg_as_index(2, self),
-                    param.resolve_arg(0, self) * param.resolve_arg(1, self),
-                );
+                self.set(args[2], self.get(args[0]) * self.get(args[1]));
                 None
             }
             Opcode::Input => {
                 let value = self.input.pop_front().expect("No input");
-                self.set(param.arg_as_index(0, self), value);
+                self.set(args[0], value);
                 None
             }
             Opcode::Output => {
-                self.output.push(param.resolve_arg(0, self));
+                self.output.push(self.get(args[0]));
                 None
             }
             Opcode::Exit => None,
             Opcode::JumpIfTrue => {
-                if param.resolve_arg(0, self) != 0 {
-                    Some(param.resolve_arg(1, self) as usize)
+                if self.get(args[0]) != 0 {
+                    Some(self.get(args[1]) as usize)
                 } else {
                     None
                 }
             }
             Opcode::JumpIfFalse => {
-                if param.resolve_arg(0, self) == 0 {
-                    Some(param.resolve_arg(1, self) as usize)
+                if self.get(args[0]) == 0 {
+                    Some(self.get(args[1]) as usize)
                 } else {
                     None
                 }
             }
             Opcode::LessThan => {
                 self.set(
-                    param.arg_as_index(2, self),
-                    if param.resolve_arg(0, self) < param.resolve_arg(1, self) {
+                    args[2],
+                    if self.get(args[0]) < self.get(args[1]) {
                         1
                     } else {
                         0
@@ -337,8 +325,8 @@ impl IntcodeComputer {
             }
             Opcode::Equals => {
                 self.set(
-                    param.arg_as_index(2, self),
-                    if param.resolve_arg(0, self) == param.resolve_arg(1, self) {
+                    args[2],
+                    if self.get(args[0]) == self.get(args[1]) {
                         1
                     } else {
                         0
@@ -347,7 +335,7 @@ impl IntcodeComputer {
                 None
             }
             Opcode::RelativeUpdate => {
-                self.relative_base += param.resolve_arg(0, self);
+                self.relative_base += self.get(args[0]);
                 None
             }
         };
