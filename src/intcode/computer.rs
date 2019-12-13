@@ -200,6 +200,9 @@ pub enum IntcodeState {
 }
 
 impl IntcodeComputer {
+    pub fn arbitrary_set(&mut self, index: usize, value: i64) {
+        self.memory[index] = value;
+    }
     #[inline]
     fn resolve_relative(&self, offset: i64) -> usize {
         (self.relative_base + offset) as usize
