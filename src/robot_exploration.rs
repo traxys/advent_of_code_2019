@@ -2,25 +2,6 @@ use crate::intcode::{parse_intcode, IntcodeComputer, IntcodeState};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 
-#[derive(PartialEq, Eq, Debug, Hash, Clone, Copy)]
-struct PathState {
-    point: Point,
-    cost: isize,
-}
-impl Ord for PathState {
-    fn cmp(&self, other: &Self) -> Ordering {
-        other
-            .cost
-            .cmp(&self.cost)
-            .then_with(|| self.point.cmp(&other.point))
-    }
-}
-impl PartialOrd for PathState {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
 #[aoc(day15, part1)]
 fn how_far_is_system(robot_code: &[i64]) -> usize {
     let computer = IntcodeComputer::new(Vec::from(robot_code));
