@@ -2,6 +2,7 @@ mod minimalist_intcode;
 mod computer;
 pub use computer::{IntcodeComputer, IntcodeState};
 
+#[aoc_generator(day15)]
 #[aoc_generator(day13)]
 #[aoc_generator(day11)]
 #[aoc_generator(day9)]

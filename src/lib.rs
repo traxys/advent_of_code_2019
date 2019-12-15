@@ -10,6 +10,8 @@ pub mod painting_robot;
 pub mod password;
 pub mod simulate_planets;
 pub mod ball_breaker;
+pub mod fuel_creation;
+pub mod robot_exploration;
 
 /*use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::RefCell;
