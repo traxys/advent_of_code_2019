@@ -13,6 +13,8 @@ pub mod ball_breaker;
 pub mod fuel_creation;
 pub mod robot_exploration;
 pub mod flawed_transmission;
+pub mod save_robots;
+pub mod tractor_scanner;
 
 /*use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::RefCell;

@@ -1,5 +1,4 @@
 use crate::intcode::{parse_intcode, IntcodeComputer, IntcodeState};
-use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 
 #[aoc(day15, part1)]
